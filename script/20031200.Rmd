@@ -1,0 +1,826 @@
+---
+title: 'Exam: Statistical Inference'
+author: "20031200"
+date: '2021'
+RVersion: 4.0.5
+RStudio Version: 1.4.1106
+Operating System: Mac
+output:
+  html_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  warning = FALSE,   # avoid warnings and messages in the output
+  message = FALSE,
+  eval=TRUE
+)
+unlist(knitr::opts_chunk$get(c("fig.height", "fig.width")))
+```
+
+# Instructions for candidates
+
+You should use the file Exam_template.Rmd provided on blackboard and you
+should load this file from your data folder / directory.
+
+Save this template as your studentID.Rmd; you will upload this file as
+your submission.
+
+Ensure that you save your data into your data folder (as discussed in
+class). You may use the files mypackages.R and helperFunctions.R; if you
+use these, do not alter them. If you wish to create additional files for
+custom functions that you have prepared in advance, make sure that you
+upload these in addition to your .Rmd file.
+
+Any changes that you make to the data (e.g. variable name changes)
+should be made entirely within R.
+
+The author of this document should be set to **your student ID**. Do not
+change the authorship to your name.
+
+The subsubsections labelled **Answer** indicate where you should put in
+your written answers. The template also provides blank code chunks for
+you to complete your answers; you may choose to add additional chunks if
+required.
+
+```{r libraries_functions}
+# load required libraries / additional files
+
+list.of.packages <- c("e1071", "beanplot", "RColorBrewer", "boot")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages) > 0) install.packages(new.packages)
+
+library('e1071')
+library('beanplot')
+library('RColorBrewer')
+library('boot')
+
+# Loading required libraries from file mypackages.R
+source('../mypackages.R') 
+
+# Loading custom statistical summary function (DescribeByTable) from file helperFunctions.R. and few other functions from helperFunctions20031200.R.
+source('../helperFunctions.R') 
+source('../helperFunctions20031200.R') 
+```
+
+```{r data}
+# load dataset
+input_data<-read.csv("../data/SeoulBikeData_forMacUsers.csv", stringsAsFactors = FALSE, fileEncoding = "UTF-8")
+```
+
+# Data description
+
+This dataset is a part of a dataset describing the number of bikes hired
+every hour as part of a bike sharing scheme in Seoul, South Korea. You
+have been asked to create a statistical model to help explain the
+variation in the number of bikes hired each hour. For simplicity, look
+at summer days that are not holidays and only use daylight hours defined
+by having solar radiation (MJ/m2) values greater than 0 when the scheme
+was functioning.
+
+Once you have completed the instructions above for selecting which
+subgroup of the data to analyse, use your studentID as a seed and select
+(but retain the order) 1000 observations to use for the analysis.
+
+Include the version of R that you are using and the operating system
+that you are using at the start of this file (with your studentID
+information).
+
+# Question 1: Data Preparation (11 marks)
+
+a.  Explain what data preparation is required for this analysis.
+
+```{=html}
+<!-- -->
+```
+1.  **Clean all the column names to make it easy to interpret,**
+
+    A. Replace dots(certain characters are converted to dots while
+    importing) to underscore
+
+    B. Convert to lowercase
+
+    C. Include only alphabets and underscore
+
+    D. Remove units
+
+2.  **Converting and Transforming every column data,**
+
+    A. Convert first column - 'Date' column as data type DATE and
+    interpret to timeZone (Seoul, South Korea (GMT+9))
+
+    B. Convert columns - 'rental_bike_count','hour' as data type -
+    INTEGER
+
+    C. Convert columns - 'temp','humidity','wind_speed',
+    'visibility','dew_point_temp','solar_radiation','rainfal','snowfall'
+    as data type - NUMERIC
+
+    D. Convert columns - 'holiday','functioning_day', 'seasion' as
+    factors
+
+3.  **If null values exist, Find and remove those rows**
+
+4.  **Filter by,**
+
+    A. Summer Days
+
+    B. Not Holidays
+
+    C. Day light hours (solar_radiation) \> 0
+
+    D. functioning_day
+
+5.  **Remove unnecessary columns**
+
+6.  **Create new column for day breaks**
+
+### Answer:
+
+b.  Implement the required preparation in the code chunk below:
+
+**(7 marks)**
+
+### Answer:
+
+**Step 1: Clean all the column names to make it easy to interpret**
+
+```{r dataprep_step1}
+# Convert dots to underscore
+names(input_data) = gsub("\\.", "_", as.character(names(input_data)))
+
+# Convert multiple underscores to one underscore
+names(input_data) = gsub("([_])\\1+", "\\1", as.character(names(input_data)))
+
+# Convert to Lowercase
+names(input_data) = gsub("([[:upper:]])", perl = TRUE, "\\L\\1", as.character(names(input_data)))
+
+# include only alphabets and underscore
+names(input_data) = gsub("[^a-z_]", "", as.character(names(input_data)))
+
+# Remove unit
+units = c("_mj_m_", "_m_s_", "_mm_", "_m_", "_cm_")
+names(input_data) = gsub(paste0(units, collapse = "|"), '', as.character(names(input_data)))
+```
+
+**Step 2: Converting and Transforming every column data**
+
+```{r dataprep_step2}
+
+# Attaching data for accessing columns easily
+
+# Convert columns - 'rental_bike_count','hour' as data type - INTEGER
+input_data$rented_bike_count = as.integer(as.numeric(as.character(input_data$rented_bike_count)))
+
+input_data$hour = as.integer(as.numeric(as.character(input_data$hour)))
+
+# Adding Z value using hour column
+z_time<-paste0(input_data$hour,":00")
+
+# Interpret and replace date based on Seoul timezone
+input_data$date = lubridate::dmy_hm(paste(input_data$date, z_time),tz = "Asia/Seoul")
+
+# Convert columns - "temp","humidity"","wind_speed"", "visibility","dew_point_temp","solar_radiation","rainfal","snowfall" as datatype - NUMERIC
+
+input_data$temperature = as.numeric(as.character(input_data$temperature))
+
+input_data$humidity = as.numeric(as.character(input_data$humidity))
+
+input_data$wind_speed = as.numeric(as.character(input_data$wind_speed))
+
+input_data$visibility = as.numeric(as.character(input_data$visibility))
+
+input_data$dew_point_temperature = as.numeric(as.character(input_data$dew_point_temperature))
+
+input_data$solar_radiation = as.numeric(as.character(input_data$solar_radiation))
+
+input_data$rainfall = as.numeric(as.character(input_data$rainfall))
+
+input_data$snowfall = as.numeric(as.character(input_data$snowfall))
+
+# Convert columns - 'holiday','functioning_day' as data type - Logical Holiday,Yes - TRUE, No Holiday, No - FALSE
+
+# Convert values to lowercase and factor them
+input_data$holiday = as.factor(tolower(input_data$holiday))
+
+input_data$functioning_day = as.factor(tolower(input_data$functioning_day))
+
+input_data$seasons = as.factor(tolower(input_data$seasons))
+
+# Check the datatypes
+str(input_data)
+```
+
+**Step 3: Remove Rows, if nulls exist**
+
+```{r dataprep_step3}
+
+# Checking to See if rows having NA or NaN 
+null_condition <- apply(input_data, 1, function(x){any(is.na(x))})
+input_data = input_data[!null_condition,]
+```
+
+**Step 4: Filtration**
+
+```{r filteration}
+
+input_data = filter(input_data, (input_data$seasons=="summer" & input_data$holiday == "no holiday" & input_data$solar_radiation > 0 & input_data$functioning_day == "yes"))
+
+```
+
+**Step 5: Omitting column functioning because it in parallel to column
+holidays, removing snowfall as all the values are zero**
+
+```{r remove_column}
+input_data = subset(input_data, select = -c(functioning_day, snowfall) )
+```
+
+**Step 6: Creating new column for day breaks**
+
+```{r new_column}
+day_breaks <- hour(hm("00:00", "6:00", "12:00", "18:00", "23:59"))
+day_breaks_labels <- c("night", "morning", "afternoon", "evening")
+input_data$day_breaks = cut(x=hour(input_data$date), breaks = day_breaks, labels = day_breaks_labels, include.lowest=TRUE)
+```
+
+# Question 2: Exploratory Data Analysis (23 marks)
+
+## Descriptive Statistics
+
+a.  What descriptive statistics would be appropriate for this dataset?
+
+**(2 marks)**
+
+### Answer (List them first):
+
+(you may want to group variables)
+
+1.  Distribution of measurements (density plot)
+
+2.  Measuring Spread (dispersion)
+
+3.  Skewness and kurtosis
+
+4.  Outliers
+
+Will analyze bookings by grouping based on month, year and time of the
+day(morning, afternoon, evening and night) accordingly.
+
+Will analyze by weather conditions
+
+b.  Perform those descriptive statistics in the code chunk below:
+
+**(4 marks)**
+
+### Answer:
+
+```{r DescriptiveStats}
+
+attach(input_data)
+
+# Summary of bookings
+DescribeByTable(rented_bike_count)
+
+# Looking maximum booking made each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(max_booking = max(rented_bike_count))
+
+# Looking least booking made each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(min_booking = min(rented_bike_count))
+
+# Looking at mean by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(mean_booking = mean(rented_bike_count))
+
+# Looking at median by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(median_booking = median(rented_bike_count))
+
+# Looking at interquartile range by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(iqr_booking = IQR(rented_bike_count))
+
+# Looking at skewness by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(skew_booking = skewness(rented_bike_count))
+
+# Looking at kurosis by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(kurtosis_booking = kurtosis(rented_bike_count))
+
+# Looking at median absolute deviation (alternative measure of spread based on the median, which inherits the median's robustness against the influence of skew and outliers) by each month
+input_data %>%
+    group_by(month = floor_date(date, "month")) %>%
+    summarise(med_abs_dev_booking = mad(rented_bike_count))
+
+# looking at overall mean booking in the morning
+input_data %>%
+  filter(day_breaks == 'morning') %>%
+  summarise(morning_mean_booking = mean(rented_bike_count))
+
+# looking at overall mean booking in the afternoon
+input_data %>%
+  filter(day_breaks == 'afternoon') %>%
+  summarise(afternoon_mean_booking = mean(rented_bike_count))
+
+# looking at overall mean booking in the evening
+input_data %>%
+  filter(day_breaks == 'evening') %>%
+  summarise(evening_mean_booking = mean(rented_bike_count))
+
+# looking at overall mean booking in the night
+input_data %>%
+  filter(day_breaks == 'night') %>%
+  summarise(night_mean_booking = mean(rented_bike_count))
+
+```
+
+c.  What have those descriptive statistics told you?
+
+### Answer:
+
+Overall, there are 1291 rows with an average 1190 bookings for three
+months (June, July and August) having least 9 bookings and highest
+number of bookings of 3556. The values suggets the distribution seems to
+be assymetric at higher range and normally distributed with few expected
+peaks at some points.
+
+The average number of bookings is highest in the month of June followed
+by July and August respectively
+
+During some day, June and July has the least number of booking of 9
+whereas August with 25 bookings.
+
+## Exploratory Graphs
+
+d.  What exploratory graphs would be appropriate for this dataset?
+
+**(2 marks)**
+
+### Answer (List them first):
+
+**BeanPlot** - Looking at range by categorical and Continuous
+
+**Histogram** - Looking at Spread for single continuous variable
+
+**ScatterPlot/Grouped Scatterplot** - Looking at spread for continuous
+variables based on categories
+
+e.  Now run those exploratory graphs in the code chunk below:
+
+**(4 marks)**
+
+### Answer:
+
+```{r ExploratoryGraphs}
+
+# Looking at distribution of the rental bookings
+ggplot(input_data, aes(log(rented_bike_count))) +
+  geom_histogram(binwidth = 1)
+
+# Popular Time of the day Bookings have been made
+bean.rented_bike_countols <- lapply(brewer.pal(6, "Set3"),
+                    function(x){return(c(x, "black", "gray", "red"))})
+
+# Range summary of bookings
+par(mar = rep(2, 4))
+range_<- fivenum(rented_bike_count)
+boxplot(rented_bike_count)
+text(x=range_[1], adj=2, labels ="Minimum")
+text(x=range_[2], adj=2.3, labels ="1st Quartile")
+text(x=range_[3], adj=3, labels ="Median")
+text(x=range_[4], adj=2.3, labels ="3rd Quartile")
+text(x=range_[5], adj=2, labels ="Maximum")
+text(x=range_[3], adj=c(0.5,-8), labels ="IQR", srt=90, cex=2)
+
+# Trend of booking over time of the day
+beanplot(rented_bike_count ~ day_breaks,
+         data = input_data,
+         main = "Bookings by time of the day",
+         xlab = "Time of the day",
+         ylab = "Number of Bookings",
+         col = bean.rented_bike_countols,
+         lwd = 1,
+         what = c (1,1,1,0),
+         log = ""
+)
+
+# Set layout for scatterplot 
+par(mfrow=c(3,1))
+layout(matrix(c(1,1,2,3), 2, 2, byrow = TRUE))
+
+# Distribution by temperature 
+ggplot(input_data,aes(rented_bike_count,temperature, colour= day_breaks))+geom_point()
+# Distribution by humidity
+ggplot(input_data,aes(rented_bike_count,humidity, colour= day_breaks))+geom_point()
+# Distribution by wind speed
+ggplot(input_data,aes(rented_bike_count,wind_speed, colour= day_breaks))+geom_point()
+# Distribution by dew point temperature
+ggplot(input_data,aes(rented_bike_count,dew_point_temperature, colour= day_breaks))+geom_point()
+# Distribution by visibility
+ggplot(input_data,aes(rented_bike_count,visibility, colour= day_breaks))+geom_point()
+# Distribution by rainfall
+ggplot(input_data,aes(rented_bike_count,rainfall, colour= day_breaks))+geom_point()
+
+```
+
+f.  What have those exploratory graphs told you?
+
+### Answer:
+
+Encompassing the data, against the influence of skewness and outliers,
+the spread seems to be more on June and less around August.
+
+There is highest number of bookings in the evenings followed by
+afternoon, morning and least at night.
+
+## Correlations
+
+g.  What linear correlations are present within this data?
+
+**(2 marks)**
+
+### Answer
+
+```{r linearcor}
+
+# Correlation
+input_data.filtered = input_data %>% select_if(is.numeric)
+co<-cor(input_data.filtered)
+
+# Plot correlation
+corrplot(co, method = "square")
+
+# Testing with correlated variables
+cor.test(rented_bike_count, hour, method = "pearson", use = "complete.obs")
+```
+
+With respect to the bookings, There seems to be high correlation with
+hour, followed by wind_speed, visibility and slighly with temperature.
+
+Considering correlated variables related to other than booking,
+
+The hour has high correlation with temperature, wind_speed
+
+The wind_speed has high correlation with hour, temperature
+
+The visiblity has high correlation with hour, temperature
+
+# Question 3: Bivariate relationship (14 marks)
+
+a.  Which of the potential explanatory variables has the strongest
+    linear relationship with the dependent variable?
+
+**(1 mark)**
+
+### Answer:
+
+With current analysis, Hour is the potential explanatory variable. On
+the other hand, there is an argument where we have low Adjusted
+R-squared value for this variable which might be because of the outliers
+at different months.
+
+b.  Create a linear model to model this relationship.
+
+**(2 marks)**
+
+### Answer:
+
+```{r model1}
+
+model1 = lm(rented_bike_count ~ hour, data = input_data)
+summary(model1)
+
+```
+
+c.  Explain and interpret the model:
+
+**(3 marks)**
+
+### Answer:
+
+The output above shows the formula to make the model, followed by a five
+number summary of the residuals and a summary of the model coefficients.
+With the given values, the model fit the line, **rented_bike_count =
+95.771 + 83.539 \* hour**
+
+The t-value and Pr(\>\|t\|)(p-value) columns indicate there is near
+certainty to zero. The low value of adjusted R-Squared also suggests
+that variable "hour" alone won't be possible to best fit the model,
+which tells roughly **25%** of the variation in rented_bike_count is
+explained by hour.
+
+d.  Comment on the performance of this model.
+
+**(4 marks)**
+
+### Answer:
+
+```{r performance_check1, fig.cap="Linear model performance having hour as exploratory data"}
+check_model(model1)
+```
+
+When we look, **Linearity**: It is showing no fitted pattern. Line does
+not seem to be approximately horizontal at zero.
+
+**Homogeneity**: The variance is very sharp at different points
+
+**Influential Observations**: Most of the points are narrow and seem to
+be influential, which is good.
+
+**Normality**: Not distributed perfectly. Seem to skew at one end.
+
+**Overall the performance of this model is weak even though it has
+satisfactory fit**
+
+## Bootstrap
+
+e.  Use bootstrapping on this model to obtain a 95% confidence interval
+    of the estimate of the slope parameter.
+
+**(4 marks)**
+
+### Answer:
+
+```{r bootstrap}
+
+# Setting student ID as the random seed value for consistency
+set.seed(20031200)
+# Replications
+no_replications = 1000 
+
+population.data <- as.data.frame(cbind(
+    input_data$rented_bike_count, input_data$hour))
+
+#Sampling the data
+sample.data <-
+  population.data[sample(nrow(population.data), 20, replace = TRUE), ]
+
+#The bootstrap regression
+sample_coef_intercept <- NULL
+sample_coef_x1 <- NULL
+
+# Bootstrap Regression
+for (i in 1:no_replications) {
+  sample_d = sample.data[sample(1:nrow(sample.data), nrow(sample.data), replace = TRUE), ]
+  
+  model_bootstrap <- lm(sample_d$V1 ~ sample_d$V2, data = sample_d)
+  
+  sample_coef_intercept <-
+    c(sample_coef_intercept, model_bootstrap$coefficients[1])
+  
+  sample_coef_x1 <-
+    c(sample_coef_x1, model_bootstrap$coefficients[2])
+}
+
+# Bootstrap CI 95%
+CI_value = quantile(sample_coef_intercept, prob = 0.95)
+
+```
+Bootstrap Confidence Interval 95% of the estimate of the slope parameter is `r round(CI_value,2)`
+
+# Question 4: Multivariable relationship (10 marks)
+
+Consider a model with all of the explanatory variables included:
+
+a.  Explain and interpret the model:
+
+**(4 marks)**
+
+### Answer:
+
+```{r model3}
+
+# Model considering all explanatory variables (numerical)
+model2 = lm(rented_bike_count ~ ., data = input_data.filtered)
+
+# Creating two samples
+set.seed(20031200)
+train_index = sample(1:nrow(input_data.filtered), 0.8 * nrow(input_data.filtered))
+train = input_data.filtered[train_index,]
+test = input_data.filtered[-train_index,]
+
+# Model considering all explanatory variables (numerical)
+model3 = lm(rented_bike_count ~ ., data = train)
+
+#Predict the test cases
+lr_predictions = predict(model3, test[,-10])
+
+#Calculate MAPE
+regr.eval(trues = test[,1], preds = lr_predictions, stats = c("mae","mse","rmse","mape"))
+
+```
+
+b.  Comment on the performance of this model.
+
+**(4 marks)**
+
+### Answer:
+
+```{r performance_check2a,fig.cap="Linear model performance having all exploratory data for whole population"}
+# Considering all explanatory variables for whole population
+check_model(model2)
+```
+
+```{r performance_check2b,fig.cap="Linear model performance having all exploratory data for sample"}
+# Considering all explanatory variables for a sample
+check_model(model3)
+```
+
+When we look, **Linearity**: It is showing no fitted pattern. Line does
+not seem to be approximately horizontal at zero.
+
+**Homogeneity**: The variance outward from the centre and seem narrow
+
+**Collinearity**: Shows high correlation with three variables
+
+**Influential Observations**: Most of the points are narrow and seem to
+be influential, which is good.
+
+**Normality**: Not distributed perfectly. Seem to skew at one end.
+
+In summary, model having all explanatory variables with few samples tend
+to perform good compared to the one with whole population. But this is
+not justified.
+
+c.  What general concerns do you have regarding this model?
+
+**(2 marks)**
+
+### Answer:
+
+The Significance seems to be pulling near zero with an residual standard
+error of 479, which is actually high. However, this model has high value
+of adjusted R-squared with 52%. Even though the model has good cross
+referential fit with all the explanatory variables, it is not fitting
+well with high degree of freedom. So model should be simplified with few
+explanatory variables with positive correlation.
+
+# Question 5: Model simplification (12 marks)
+
+Try to simplify the model made for Question 4.
+
+a.  What grounds for model simplification are you considering and why?
+
+**(4 marks)**
+
+### Answer:
+
+Assuming the data to be fairly in normality, there were difference in
+adjusted R-squared result from model with hour as explanatory variable
+and other model considering all explanatory variable.
+
+So trying two possible scenarios, 1. Try with existing explanatory
+variables along with those that have high correlation. 2. Using AIC to
+pick variables and with stepwise selection iteratively add and remove
+predictors to find those subsets resulting in best performance.
+
+b.  Explain and interpret the selected "best" model. What model
+    simplification (if any) has been achieved?
+
+**(4 marks)**
+
+### Answer:
+
+```{r best_model}
+
+summary(lm(rented_bike_count ~ wind_speed,day_breaks, data = input_data.filtered))
+
+# Creating another sample with 1000 observations
+set.seed(20031200)
+sample_index = sample(1:nrow(input_data.filtered), 1000)
+sample_N_1000 = input_data.filtered[sample_index,]
+
+# Testing to see the variance of random 1000 samples
+t.test(input_data.filtered, sample_N_1000, conf.level = 0.95)
+
+# Using AIC to pick Variables
+multilinreg<-lm(rented_bike_count~.,data=sample_N_1000)
+stepAIC(multilinreg, direction = "both")
+
+# Using BIC to pick variables
+n<-nrow(sample_N_1000) 
+variable_selection_analysis = stepAIC(multilinreg,direction = "both", k = log(n), trace = TRUE)
+
+# Get comparable suggestion of best fit set of exploratory variables
+variable_selection_analysis$anova
+```
+
+As we can see from the output, all variables except **wind_speed** is
+included in this regression. Variables visibility, rainfall,
+dew_point_temperature, sun_radiation are found to be statistically
+significant at conventional level considering 1000 samples.
+
+c.  Comment on the performance of this model.
+
+**(4 marks)**
+
+### Answer:
+
+```{r bestmodel_performance}
+
+# Building model with all exploratory variables with 1000 samples
+model4 = lm(rented_bike_count ~ ., data = sample_N_1000)
+
+# Building model with exploratory variables except wind_speed as suggested after stepAIC with 1000 samples
+model5 = lm(rented_bike_count ~ hour + temperature + humidity + visibility + 
+    dew_point_temperature + solar_radiation + rainfall, data = sample_N_1000)
+
+# Summary of Model 4
+summary(model4)
+
+# Summary of Model 5
+summary(model5)
+
+# Compare Model Performances of model 4 and model 5 individually
+model_performance(model4) %>%
+  kbl() %>%
+  kable_paper("striped", full_width = F)
+
+model_performance(model5) %>%
+  kbl() %>%
+  kable_paper("striped", full_width = F)
+```
+
+As you can see from the output, there is just marginal improvement in
+the performance of the model after considering the variables suggested
+post stepAIC selection.
+
+# Question 6: Reporting (30 marks)
+
+Write a short report for a client based in Bristol outlining your
+analysis and your findings, illustrating what they could learn about
+patterns in when bicycles are hired and any data collection
+recommendations you have for them so that they can optimize the analysis
+for their situation.
+
+Highlight what may or may not be directly transferable from the scenario
+analyzed here.
+
+### Answer:
+
+The data-set we have analyzed is based on **bike sharing scheme in
+Seoul, South Korea**, which describes about number of bikes hired every
+hour at different weather conditions taken 1 year data from **December
+2017 to November 2018**.
+
+Before we start any business, we first need to **understand the weather
+conditions** of that location. Let's understand the weather conditions
+of Seoul from the data-set, The temperature ranges from -18 Celsius to
+39 Celsius averaging between -3C and 25C on usual conditions. In that
+summer, **people experienced high humidity with wind speed having mild
+seasonal variation around 2 m/s**.
+
+Next lets look at the **trend of the bookings made during working hours
+in June, July and August**. During these times, temperature was around
+20 and 25 where visibility was good with wind-speed less than 2m/s.
+There has been over **1.5 million bookings** with an average of 1190
+bookings, with highest number of bookings during the month of June.
+People preferred to **mostly ride in the evenings rather than in the
+night**. These bookings are favored by the and occurring climatic
+conditions. The model analyzed favorable conditions for the trend in
+cycle booking and came to a plausible conclusion that hour of the day is
+very important mainly due to temperature and Humidity with a slight
+degree of change depending on wind speed and visibility with hardly any
+rainfall.
+
+When we look at the same instance for the conditions in Bristol over a
+period of 10 years, the place is actually warm and temperate.
+**[[1](https://en.climate-data.org/europe/united-kingdom/england/bristol-5706/)]**People
+have experienced about 10C average temperature and very high
+precipitation of rainfall. If we **assume the three months June, July
+and August for comparing the trends in Seoul with Bristol** with respect
+to the climatic conditions,
+
+-   Bristol is significantly less warmer than Seoul.
+
+-   There are more rainy days in Bristol than Seoul
+
+-   Bristol has less foggy days compared to Seoul
+
+-   Comparatively Bristol lashes with very high wind speed
+
+Comparing our current data-set with the above stated comparisons, can
+**conclude Bristol has better weather conditions for cycling during
+those months**. But the model suggests that the current data is not
+sufficient to state all the right conditions to evaluate the variation
+of the bookings. In order to be more accurate, **we need more daily
+time-series data spanning for 5 years and analyze for all the seasons to
+get the right set of trends**.
+
+[**References**]{.ul}
+
+[1]<https://en.climate-data.org/europe/united-kingdom/england/bristol-5706/>
